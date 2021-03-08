@@ -12,6 +12,8 @@ import matplotlib.pyplot as plt
 from matplotlib.gridspec import GridSpec
 from matplotlib.colors import LogNorm
 
+import glob
+
 # Source parameters
 SOURCE_DECL       = 30
 SOURCE_D          = 337   * 3.086*1e16 # Distance = 337pc
@@ -21,20 +23,19 @@ LAMBDA            = 3.5e-7             # radiation wavelength
 FLUX              = 2.85e-9
 
 # Control the masks used for plotting and splines:
-# Be careful here, extemt / mask_width MUT NOT be integer.
-BLINE_MASK_WIDTH  = 2.              # In LAMBDA/SOURCE_D units
-DELTA_MASK_WIDTH  = 4.              # In SOURCE_D units
+BLINE_MASK_WIDTH  = 2              # In LAMBDA/SOURCE_D units
+DELTA_MASK_WIDTH  = 4              # In SOURCE_D units
 RAD_TO_MAS        = 1e3 * (3600 * 180) / np.pi
 
 # Default resolution
-SOURCE_RESOLUTION = 64       # Resolution of the source
-IMAGE_SIZE        = 64       # In source resolution units... (that's a bit weird, I know)
+SOURCE_RESOLUTION = 32       # Resolution of the source
+IMAGE_SIZE        = 32       # In source resolution units... (that's a bit weird, I know)
 
-# CTA Properties
+# Array Properties
 T_RES             = 0.5e-9
 NCHANNEL          = 1024
 ALPHA             = 0.4
-CTA_LATTITUDE     = 24
+LATTITUDE         = 24
 TELESCOPE_POS     = ['23m_telescope.csv', '04m_telescope.csv', '12m_telescope.csv','08m_telescope.csv', '39m_telescope.csv'] 
 TELESCOPE_AREAS   = [np.pi*(23./2)**2, np.pi*2**2, np.pi*6**2, np.pi*(8./2)**2, np.pi*(8./2)**2]
 
@@ -90,8 +91,8 @@ class UVplane:
         self.delta_min = self.source.delta / self.N_s
         self.delta_max = self.source.delta * self.n
 
-        self.bline_min = LAMBDA / self.source.delta_rad / self.N_s
-        self.bline_max = LAMBDA / self.source.delta_rad * self.n
+        self.bline_min = LAMBDA / self.source.delta_rad / self.n
+        self.bline_max = LAMBDA / self.source.delta_rad * self.N_s
 
         self.bline_mask_w = bline_mask_w * LAMBDA / self.source.delta_rad
         self.delta_mask_w = delta_mask_w * self.source.delta
@@ -101,8 +102,6 @@ class UVplane:
         self.ext_physical_masked = self.delta_mask_w * ext
         self.ext_spectral = self.bline_max * ext
         self.ext_spectral_masked = self.bline_mask_w * ext
-        
-        print(self.ext_spectral_masked)
 
     def idx_to_delta(self, i, bMask=False):
         if (bMask):
@@ -117,9 +116,8 @@ class UVplane:
             n = self.n*BLINE_MASK_WIDTH
         else:
             n = self.N
-            width = self.bline_max
-            
-        ret = (i-n//2.) * self.bline_min
+
+        ret = (i-n//2) * self.bline_min
         return ret
 
     def getAngularDistribution(self, bMask):
@@ -134,8 +132,8 @@ class UVplane:
             return rho
 
         else:
-            mask_x = (d_x <= 0.5*self.delta_mask_w) & (d_x >= -0.5*self.delta_mask_w)
-            mask_y = (d_y <= 0.5*self.delta_mask_w) & (d_y >= -0.5*self.delta_mask_w)
+            mask_x = (d_x < 0.5*self.delta_mask_w) & (d_x > -0.5*self.delta_mask_w)
+            mask_y = (d_y < 0.5*self.delta_mask_w) & (d_y > -0.5*self.delta_mask_w)
             rho = rho[mask_x, :]
             rho = rho[:, mask_y]
             return rho
@@ -164,7 +162,7 @@ class UVplane:
             ret = ret[:, mask_y]
             return ret
 
-    def plotFigure2(self):
+    def plotSource(self):
         fig, ax = plt.subplots(1,2,figsize=(36, 24))
         fig.subplots_adjust(wspace = 0.32)
         circ = plt.Circle( xy = (0,0), radius = self.source.delta*1000,
@@ -184,6 +182,7 @@ class UVplane:
 
         b_x = self.idx_to_bline(i, bMask=True)
         b_y = self.idx_to_bline(j, bMask=True)
+        
         con = ax[1].contour(b_x, b_y, corr, levels=[0.01, 0.1,0.2,0.3,.4,.5,.6,.7,.8,.9,.975], colors='black')
 
         ax[0].tick_params(labelsize=26)
@@ -237,9 +236,9 @@ def R(h,d,l):
     ret = np.dot(  ret, Rx(-l))
     return ret
 
-class CTA:
-    def __init__(self, UVplane, bAddCTA=True, bAddVLT=True, bAddELT=True, nGrid=128, nPerTraj=128):
-        self.latt = CTA_LATTITUDE
+class TelescopeArray:
+    def __init__(self, UVplane, layout='layouts/basic_cta', nGrid=128, nPerTraj=128):
+        self.latt = LATTITUDE
         self.decl = SOURCE_DECL
 
         self.bline_max  = 2500
@@ -253,38 +252,31 @@ class CTA:
         self.UVplane = UVplane
         self.spline = self.UVplane.getCorrelationSpline(bMask=True)
         
-        TELESCOPE_POS   = []
-        TELESCOPE_AREAS = []
-        
-        if bAddCTA:
-            TELESCOPE_POS.append('04m_telescope.csv')
-            TELESCOPE_AREAS.append(np.pi*2**2)
-            TELESCOPE_POS.append('12m_telescope.csv')
-            TELESCOPE_AREAS.append(np.pi*6**2)
-            TELESCOPE_POS.append('23m_telescope.csv')
-            TELESCOPE_AREAS.append(np.pi*(23./2)**2)
-            self.bline_max  = 2500
-        
-        if bAddVLT:
-            TELESCOPE_POS.append('08m_telescope.csv')
-            TELESCOPE_AREAS.append(np.pi*(8./2)**2)
-            self.bline_max  = 12000
-        
-        if bAddELT:
-            TELESCOPE_POS.append('39m_telescope.csv')
-            TELESCOPE_AREAS.append(np.pi*(39.3/2)**2)
-            self.bline_max  = 24000
-        
-        N_files = len(TELESCOPE_POS)
-        print(N_files)
-         
-        for k in range(N_files):
-            for l in range(k+1):
-                print(l,k,TELESCOPE_POS[k], TELESCOPE_POS[l])
-                self.files.append([TELESCOPE_POS[k], TELESCOPE_POS[l]])
-                self.areas.append(np.sqrt(TELESCOPE_AREAS[k] * TELESCOPE_AREAS[l]))
+        self.readLayout(layout)
 
         self.bGrids = False
+        
+    def read_diameter(self, file):
+        return np.float(file.split('/')[-1].split('_')[0][:-1])
+        
+    def readLayout(self, layout):
+        self.layout=layout
+        files = glob.glob(layout+'/*telescope.csv')
+        n = len(files)
+        areas = np.zeros(n)
+        self.telescope_files = files
+        for i, f in enumerate(files):
+            diam = self.read_diameter(f)
+            areas[i] = np.pi*(diam / 2.0)**2
+        self.telescope_areas = areas
+        
+        self.files = []
+        self.areas = []
+        for k in range(n):
+            for l in range(k+1):
+                print(l,k,self.telescope_files[k], self.telescope_files[l])
+                self.files.append([self.telescope_files[k], self.telescope_files[l]])
+                self.areas.append(np.sqrt(self.telescope_areas[k] * self.telescope_areas[l]))
 
     def getTrajectory(self, blines):
         if len(blines) == 2 :
@@ -357,7 +349,9 @@ class CTA:
             meanArea += area * 2 * len(pairs)
 
             pbar = tqdm(pairs)
-            pbar.set_description('Pairs ({}-{})'.format(self.files[i][0][:2], self.files[i][1][:2]))
+            diam1 = self.read_diameter(self.files[i][0])
+            diam2 = self.read_diameter(self.files[i][1])
+            pbar.set_description('Pairs ({}-{})'.format(diam1, diam2))
             for p in pbar:
                 B = (p[0] - p[1])
                 uv = self.getTrajectory(B)
@@ -365,7 +359,6 @@ class CTA:
                 uv = self.getTrajectory(-B)
                 self.integrateGrids(uv, area, areaGrid, nInGrid)
 
-        print(nPairs)
         self.nPairs = nPairs
         self.meanArea = meanArea / nPairs
 
@@ -414,7 +407,7 @@ class CTA:
                 mean = self.timeGrid[i,j] * self.areaGrid[i,j]**2 * fac_signal * self.spline(u, v)
                 if (bNoise):
                     if (snr[i,j]>0):
-                        sigma = mean / (snr[i,j] * np.sqrt(nNights))
+                        sigma = np.fabs(mean / (snr[i,j] * np.sqrt(nNights)))
                         val = np.random.normal(mean, sigma)
                         signal[i,j] = val
                 else :
