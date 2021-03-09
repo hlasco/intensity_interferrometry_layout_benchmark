@@ -399,6 +399,8 @@ class TelescopeArray:
         std = np.zeros((self.N_snr_grid, self.N_snr_grid))
 
         fac_signal = nNights * (ALPHA * FLUX)**2 * NCHANNEL# / T_RES
+
+        
         for i in range(self.N_snr_grid):
             for j in range(self.N_snr_grid):
                 u0, v0 = self.getPosition(i, j)
