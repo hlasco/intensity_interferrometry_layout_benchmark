@@ -397,6 +397,7 @@ class TelescopeArray:
         snr  = self.getSNRGrid() * np.sqrt(nNights)
         area = self.areaGrid
         signal = np.zeros((self.N_snr_grid, self.N_snr_grid))
+        std = np.zeros((self.N_snr_grid, self.N_snr_grid))
 
         fac_signal = nNights * (ALPHA * FLUX)**2 * NCHANNEL# / T_RES
         for i in range(self.N_snr_grid):
@@ -410,6 +411,7 @@ class TelescopeArray:
                         sigma = np.fabs(mean / (snr[i,j] * np.sqrt(nNights)))
                         val = np.random.normal(mean, sigma)
                         signal[i,j] = val
+                        std[i,j] = sigma
                 else :
                     signal[i,j] = mean
-        return signal
+        return signal, std
