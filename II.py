@@ -274,7 +274,6 @@ class TelescopeArray:
         self.areas = []
         for k in range(n):
             for l in range(k+1):
-                print(l,k,self.telescope_files[k], self.telescope_files[l])
                 self.files.append([self.telescope_files[k], self.telescope_files[l]])
                 self.areas.append(np.sqrt(self.telescope_areas[k] * self.telescope_areas[l]))
 
@@ -325,7 +324,7 @@ class TelescopeArray:
             return [[l1[i],l2[j]] for i in range(len(l1)) for j in range(i, len(l2)) if np.prod(l1[i] != l2[j])]
 
     def setGrids(self):
-        print('Computing SNR grid:', flush=True)
+        print('Computing SNR grid from layout:', self.layout, flush=True)
         areaGrid = np.zeros((self.N_snr_grid, self.N_snr_grid))
         nInGrid  = np.zeros((self.N_snr_grid, self.N_snr_grid))
 
